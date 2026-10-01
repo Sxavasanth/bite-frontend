@@ -201,6 +201,13 @@
   #toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 20px; font-size: 14px; font-weight: 500; opacity: 0; transition: all .2s; pointer-events: none; z-index: 999; white-space: nowrap; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* ── Forgot password ── */
+  .forgot-link { text-align: right; margin-top: -6px; margin-bottom: 10px; }
+  .forgot-link span { font-size: 13px; color: var(--accent); cursor: pointer; }
+  .auth-success { background: rgba(62,166,107,0.15); border: 1px solid rgba(62,166,107,0.3); color: var(--green); font-size: 13px; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 14px; display: none; }
+  .auth-success.show { display: block; }
+  .back-to-login { font-size: 13px; color: var(--accent); cursor: pointer; display: flex; align-items: center; gap: 4px; margin-bottom: 16px; }
+
   /* ── Spinner ── */
   .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -235,8 +242,44 @@
         <label class="auth-label">Password</label>
         <input class="auth-input" id="login-password" type="password" placeholder="Your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
+      <div class="forgot-link"><span onclick="showForgotPanel()">Forgot password?</span></div>
       <button class="auth-btn" id="login-btn" onclick="doLogin()">Log in</button>
       <div class="auth-divider">Don't have an account? <span style="color:var(--accent);cursor:pointer" onclick="switchAuthTab('register')">Sign up</span></div>
+    </div>
+
+    <!-- Forgot password panel -->
+    <div id="forgot-form" style="display:none">
+      <div class="back-to-login" onclick="hideForgotPanel()">← Back to log in</div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:20px;font-weight:700;margin-bottom:6px">Reset your password</div>
+        <div style="font-size:14px;color:var(--text-muted)">Enter your email and we'll send you a link to reset your password.</div>
+      </div>
+      <div id="forgot-success" class="auth-success"></div>
+      <div id="forgot-error" class="auth-error"></div>
+      <div class="auth-field">
+        <label class="auth-label">Email</label>
+        <input class="auth-input" id="forgot-email" type="email" placeholder="you@email.com" autocomplete="email" onkeydown="if(event.key==='Enter')doForgotPassword()">
+      </div>
+      <button class="auth-btn" id="forgot-btn" onclick="doForgotPassword()">Send reset link</button>
+    </div>
+
+    <!-- Reset password panel (shown when ?token= in URL) -->
+    <div id="reset-form" style="display:none">
+      <div style="margin-bottom:16px">
+        <div style="font-size:20px;font-weight:700;margin-bottom:6px">Set new password</div>
+        <div style="font-size:14px;color:var(--text-muted)">Choose a strong password for your account.</div>
+      </div>
+      <div id="reset-success" class="auth-success"></div>
+      <div id="reset-error" class="auth-error"></div>
+      <div class="auth-field">
+        <label class="auth-label">New password</label>
+        <input class="auth-input" id="reset-password" type="password" placeholder="Min. 6 characters">
+      </div>
+      <div class="auth-field">
+        <label class="auth-label">Confirm password</label>
+        <input class="auth-input" id="reset-confirm" type="password" placeholder="Repeat your password" onkeydown="if(event.key==='Enter')doResetPassword()">
+      </div>
+      <button class="auth-btn" id="reset-btn" onclick="doResetPassword()">Update password</button>
     </div>
 
     <!-- Register form -->
@@ -475,9 +518,95 @@ let toastTimer;
 function switchAuthTab(tab) {
   document.getElementById('login-form').style.display    = tab === 'login'    ? 'block' : 'none';
   document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('forgot-form').style.display  = 'none';
+  document.getElementById('reset-form').style.display   = 'none';
   document.getElementById('tab-login-btn').classList.toggle('active', tab === 'login');
   document.getElementById('tab-register-btn').classList.toggle('active', tab === 'register');
+  document.getElementById('tab-login-btn').style.display = 'flex';
+  document.getElementById('tab-register-btn').style.display = 'flex';
   clearAuthError();
+}
+
+function showForgotPanel() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display = 'none';
+  document.getElementById('forgot-form').style.display = 'block';
+  document.getElementById('tab-login-btn').style.display = 'none';
+  document.getElementById('tab-register-btn').style.display = 'none';
+  clearAuthError();
+  document.getElementById('forgot-success').classList.remove('show');
+  document.getElementById('forgot-error').classList.remove('show');
+}
+
+function hideForgotPanel() {
+  document.getElementById('forgot-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('tab-login-btn').style.display = '';
+  document.getElementById('tab-register-btn').style.display = '';
+  document.getElementById('tab-login-btn').classList.add('active');
+  document.getElementById('tab-register-btn').classList.remove('active');
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const errEl = document.getElementById('forgot-error');
+  const sucEl = document.getElementById('forgot-success');
+  errEl.classList.remove('show');
+  sucEl.classList.remove('show');
+  if (!email) { errEl.textContent = 'Please enter your email'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('forgot-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    sucEl.textContent = '✅ Reset link sent! Check your inbox (and spam folder).';
+    sucEl.classList.add('show');
+    document.getElementById('forgot-email').value = '';
+  } catch (err) {
+    // Always show success message to prevent email enumeration
+    sucEl.textContent = '✅ If that email is registered, a reset link is on its way.';
+    sucEl.classList.add('show');
+  } finally {
+    btn.innerHTML = 'Send reset link';
+    btn.disabled = false;
+  }
+}
+
+async function doResetPassword() {
+  const token    = new URLSearchParams(window.location.search).get('token');
+  const password = document.getElementById('reset-password').value;
+  const confirm  = document.getElementById('reset-confirm').value;
+  const errEl    = document.getElementById('reset-error');
+  const sucEl    = document.getElementById('reset-success');
+  errEl.classList.remove('show');
+  sucEl.classList.remove('show');
+  if (!password || password.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; errEl.classList.add('show'); return; }
+  if (password !== confirm) { errEl.textContent = 'Passwords do not match'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('reset-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    });
+    sucEl.textContent = '✅ Password updated! You can now log in.';
+    sucEl.classList.add('show');
+    setTimeout(() => {
+      window.history.replaceState({}, '', window.location.pathname);
+      switchAuthTab('login');
+    }, 2000);
+  } catch (err) {
+    errEl.textContent = err.message || 'Reset link is invalid or expired.';
+    errEl.classList.add('show');
+  } finally {
+    btn.innerHTML = 'Update password';
+    btn.disabled = false;
+  }
 }
 
 function showAuthError(msg) {
@@ -893,6 +1022,18 @@ function showToast(msg) {
 
 // ── INIT ───────────────────────────────────────────────────────────────────
 (async function init() {
+  // Check for password reset token in URL
+  const resetToken = new URLSearchParams(window.location.search).get('token');
+  if (resetToken) {
+    document.getElementById('login-form').style.display = 'none';
+    document.getElementById('register-form').style.display = 'none';
+    document.getElementById('forgot-form').style.display = 'none';
+    document.getElementById('reset-form').style.display = 'block';
+    document.getElementById('tab-login-btn').style.display = 'none';
+    document.getElementById('tab-register-btn').style.display = 'none';
+    return;
+  }
+  // Check for existing session
   const token = localStorage.getItem('bite_token');
   if (token) {
     try {
