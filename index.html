@@ -559,11 +559,11 @@ async function doForgotPassword() {
   btn.innerHTML = '<span class="spinner"></span>';
   btn.disabled = true;
   try {
-    await apiFetch('/api/auth/forgot-password', {
+    const data = await apiFetch('/api/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
     });
-    sucEl.textContent = '✅ Reset link sent! Check your inbox (and spam folder).';
+    const resetUrl = data.reset_url; if (resetUrl) { sucEl.innerHTML = '✅ Reset link generated! <a href="' + resetUrl + '" style="color:var(--accent)">Click here to reset your password</a>'; } else { sucEl.textContent = 'If that email is registered, a reset link has been generated.'; }
     sucEl.classList.add('show');
     document.getElementById('forgot-email').value = '';
   } catch (err) {
